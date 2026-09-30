@@ -157,7 +157,7 @@ class ExerciseViewModel(
     fun start()  { viewModelScope.launch { try { repo.start(selectedSport) } catch (e: Exception) { Log.e(TAG, "Start failed", e) } } }
     fun pause()  { viewModelScope.launch { try { repo.pause() } catch (e: Exception) { Log.e(TAG, "Pause failed", e) } } }
     fun resume() { viewModelScope.launch { try { repo.resume() } catch (e: Exception) { Log.e(TAG, "Resume failed", e) } } }
-    fun stop()   { viewModelScope.launch { repo.stop() } }
+    fun stop(save: Boolean = true) { viewModelScope.launch { repo.stop(save) } }
 
     override fun onCleared() {
         stopNotificationObservation()
@@ -171,7 +171,7 @@ class ExerciseViewModel(
 
 class ExerciseViewModelFactory(
     private val api: PolarBleApi,
-    private val deviceId: String,
+    private val identifier: String,
     private val context: Context
 ) : ViewModelProvider.Factory {
     @Suppress("UNCHECKED_CAST")
@@ -181,7 +181,7 @@ class ExerciseViewModelFactory(
         val repo = ExerciseRepository(
             api as com.polar.sdk.api.PolarTrainingSessionApi,
             api,
-            deviceId,
+            identifier,
             prefs
         )
         return ExerciseViewModel(repo, AndroidStringProvider(appCtx)) as T

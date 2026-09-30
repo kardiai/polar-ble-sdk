@@ -23,6 +23,7 @@ struct GenericApiView: View {
     @State private var pathWhenRead: String = ""
     @State private var pathWhenWrite: String = ""
     @State private var pathWhenDelete: String = ""
+    @State private var pathWhenCreateFolder: String = ""
     @State private var binaryData: String = ""
     @State private var toastTimeOut: Double = 10.0
     
@@ -67,7 +68,7 @@ struct GenericApiView: View {
                                     toastTimeOut = 10
                                     toast = "Fetching file list failed with error \(err)"
                                     genericApiFileOperationInProgress = false
-                                    NSLog("Listing files for path \(pathWhenList) failed with error \(err)")
+                                    AppLogger.log("Listing files for path \(pathWhenList) failed with error \(err)")
                                 }
                                 
                                 genericApiFileOperationInProgress = false
@@ -122,7 +123,7 @@ struct GenericApiView: View {
                             } catch let err {
                                 genericApiFileOperationInProgress = false
                                 toast = "Reading file \(pathWhenRead) failed with error \(err)"
-                                NSLog("Reading file \(pathWhenRead) failed with error \(err)")
+                                AppLogger.log("Reading file \(pathWhenRead) failed with error \(err)")
                             }
                             
                             genericApiFileOperationInProgress = false
@@ -193,7 +194,7 @@ struct GenericApiView: View {
                                 } catch let err {
                                     genericApiFileOperationInProgress = false
                                     toast = "Writing data to \(pathWhenWrite) failed with error \(err)"
-                                    NSLog("Writing file to path \(pathWhenWrite) failed with error \(err)")
+                                    AppLogger.log("Writing file to path \(pathWhenWrite) failed with error \(err)")
                                 }
                             } else {
                                 toast = "Empty file data!"
@@ -223,7 +224,33 @@ struct GenericApiView: View {
                             } catch let err {
                                 genericApiFileOperationInProgress = false
                                 toast = "Deleting file from path \(pathWhenDelete) failed with error \(err)"
-                                NSLog("Deleting file from path \(pathWhenDelete) failed with error \(err)")
+                                AppLogger.log("Deleting file from path \(pathWhenDelete) failed with error \(err)")
+                            }
+                            genericApiFileOperationInProgress = false
+                        }
+                    }
+                    .buttonStyle(PrimaryButtonStyle(buttonState: ButtonState.released))
+                    .disabled(genericApiFileOperationInProgress)
+                }
+
+                VStack(spacing: 3) {
+                    Text("Create a folder on device")
+                        .font(.subheadline).fontWeight(.semibold)
+
+                    TextField("Folder path to create", text: $pathWhenCreateFolder)
+                        .keyboardType(.alphabet)
+                        .textFieldStyle(RoundedBorderTextFieldStyle())
+
+                    Button("Create") {
+                        Task {
+                            genericApiFileOperationInProgress = true
+                            do {
+                                toast = "Creating folder \(pathWhenCreateFolder)"
+                                try await bleSdkManager.createFolder(folderPath: pathWhenCreateFolder)
+                                toast = "Folder \(pathWhenCreateFolder) created successfully"
+                            } catch let err {
+                                toast = "Creating folder \(pathWhenCreateFolder) failed with error \(err)"
+                                AppLogger.log("Creating folder \(pathWhenCreateFolder) failed with error \(err)")
                             }
                             genericApiFileOperationInProgress = false
                         }

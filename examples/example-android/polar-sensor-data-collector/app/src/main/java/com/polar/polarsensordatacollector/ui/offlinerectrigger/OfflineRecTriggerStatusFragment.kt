@@ -67,9 +67,7 @@ class OfflineRecTriggerStatusFragment : Fragment(R.layout.fragment_offline_trigg
         viewLifecycleOwner.lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 offlineTriggerStatusViewModel.uiShowError.collect {
-                    if (it.header.isNotEmpty()) {
                         showSnackBar(rootView = requireView(), header = it.header, description = it.description ?: "", showAsError = true)
-                    }
                 }
             }
         }
@@ -77,9 +75,7 @@ class OfflineRecTriggerStatusFragment : Fragment(R.layout.fragment_offline_trigg
         viewLifecycleOwner.lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 offlineTriggerStatusViewModel.uiShowInfo.collect {
-                    if (it.header.isNotEmpty()) {
-                        showSnackBar(rootView = requireView(), it.header, it.description ?: "")
-                    }
+                        showSnackBar(rootView = requireView(), it.header, it.description ?: "", timeout = it.timeout)
                 }
             }
         }
@@ -144,7 +140,7 @@ class OfflineRecTriggerStatusFragment : Fragment(R.layout.fragment_offline_trigg
             }
 
             OfflineRecTriggerStatusUiState.FetchingStatus -> {
-                triggerStatusMode.text = "Fetching status"
+                triggerStatusMode.setText(R.string.fetching_status)
                 fetchProgressIndicator.visibility = VISIBLE
                 hideTriggerMode()
                 hideSettings()
@@ -233,6 +229,7 @@ class OfflineRecTriggerStatusFragment : Fragment(R.layout.fragment_offline_trigg
             PolarDeviceDataType.LOCATION -> locTriggerStatus
             PolarDeviceDataType.TEMPERATURE -> temperatureTriggerStatus
             PolarDeviceDataType.HR -> hrTriggerStatus
+            PolarDeviceDataType.DERIVED_MEASUREMENT -> accTriggerStatus
         }
     }
 
@@ -249,6 +246,7 @@ class OfflineRecTriggerStatusFragment : Fragment(R.layout.fragment_offline_trigg
             PolarDeviceDataType.TEMPERATURE -> "TEM"
             PolarDeviceDataType.SKIN_TEMPERATURE -> "SKIN_TEM"
             PolarDeviceDataType.HR -> "HR"
+            PolarDeviceDataType.DERIVED_MEASUREMENT -> "ACC"
         }
     }
 }

@@ -24,7 +24,7 @@ import kotlinx.coroutines.withTimeout
 class ExerciseRepository(
     private val api: PolarTrainingSessionApi,
     private val bleApi: PolarBleApi,
-    private val deviceId: String,
+    private val identifier: String,
     private val prefs: SharedPreferences,
     private val scope: CoroutineScope = CoroutineScope(Dispatchers.IO)
 ) {
@@ -76,7 +76,7 @@ class ExerciseRepository(
     fun startObservingExerciseStatus(): Job {
         observeJob?.cancel()
         observeJob = scope.launch {
-            api.observeExerciseStatus(deviceId)
+            api.observeExerciseStatus(identifier)
                 .catch { error ->
                     Log.w(TAG, "Exercise status observation error: ${error.message}")
                     _errorEvent.value = "Exercise status error: ${error.message ?: "unknown error"}"
@@ -96,7 +96,7 @@ class ExerciseRepository(
 
     suspend fun refresh() {
         try {
-            val info = mergeWithMemory(api.getExerciseStatus(deviceId))
+            val info = mergeWithMemory(api.getExerciseStatus(identifier))
             _state.value = info
             _errorEvent.value = null
         } catch (e: Exception) {
@@ -108,7 +108,7 @@ class ExerciseRepository(
     suspend fun start(profile: PolarExerciseSession.SportProfile) {
         try {
             lastKnownSport = profile
-            api.startExercise(deviceId, profile)
+            api.startExercise(identifier, profile)
             _state.value = PolarExerciseSession.ExerciseInfo(
                 status = PolarExerciseSession.ExerciseStatus.IN_PROGRESS,
                 sportProfile = profile
@@ -123,7 +123,7 @@ class ExerciseRepository(
 
     suspend fun pause() {
         try {
-            api.pauseExercise(deviceId)
+            api.pauseExercise(identifier)
             _state.value = _state.value.copy(status = PolarExerciseSession.ExerciseStatus.PAUSED)
             _errorEvent.value = null
         } catch (e: Exception) {
@@ -135,7 +135,7 @@ class ExerciseRepository(
 
     suspend fun resume() {
         try {
-            api.resumeExercise(deviceId)
+            api.resumeExercise(identifier)
             _state.value = _state.value.copy(status = PolarExerciseSession.ExerciseStatus.IN_PROGRESS)
             _errorEvent.value = null
         } catch (e: Exception) {
@@ -145,26 +145,29 @@ class ExerciseRepository(
         }
     }
 
-    suspend fun stop() {
-        api.stopExercise(deviceId)
+    suspend fun stop(save: Boolean = true) {
+        api.stopExercise(identifier, save)
         _state.value = PolarExerciseSession.ExerciseInfo(
-            status = PolarExerciseSession.ExerciseStatus.SYNC_REQUIRED,
+            status = if (save) PolarExerciseSession.ExerciseStatus.SYNC_REQUIRED
+                     else PolarExerciseSession.ExerciseStatus.NOT_STARTED,
             sportProfile = lastKnownSport
         )
-        try {
-            bleApi.sendInitializationAndStartSyncNotifications(deviceId)
-        } catch (e: Exception) {
-            Log.w(TAG, "startSync failed: ${e.message}")
-        }
-        try {
-            waitUntilLikelySynced(timeoutMs = 90_000L, pollMs = 2_000L)
-        } catch (e: Exception) {
-            Log.w(TAG, "waitUntilLikelySynced timed out or failed: ${e.message}")
-        }
-        try {
-            bleApi.sendTerminateAndStopSyncNotifications(deviceId)
-        } catch (e: Exception) {
-            Log.w(TAG, "stopSync failed: ${e.message}")
+        if (save) {
+            try {
+                bleApi.sendInitializationAndStartSyncNotifications(identifier)
+            } catch (e: Exception) {
+                Log.w(TAG, "startSync failed: ${e.message}")
+            }
+            try {
+                waitUntilLikelySynced(timeoutMs = 90_000L, pollMs = 2_000L)
+            } catch (e: Exception) {
+                Log.w(TAG, "waitUntilLikelySynced timed out or failed: ${e.message}")
+            }
+            try {
+                bleApi.sendTerminateAndStopSyncNotifications(identifier)
+            } catch (e: Exception) {
+                Log.w(TAG, "stopSync failed: ${e.message}")
+            }
         }
         refresh()
     }
@@ -173,7 +176,7 @@ class ExerciseRepository(
         withTimeout(timeoutMs) {
             flow {
                 while (true) {
-                    emit(api.getExerciseStatus(deviceId))
+                    emit(api.getExerciseStatus(identifier))
                     delay(pollMs)
                 }
             }

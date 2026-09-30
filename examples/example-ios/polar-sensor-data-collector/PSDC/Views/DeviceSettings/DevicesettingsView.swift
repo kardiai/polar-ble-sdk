@@ -35,6 +35,7 @@ struct DeviceSettingsView: View {
     @State private var showError = false
     @State private var selectedFirmwareFileURL: URL?
     @State private var showFactoryResetAlert = false
+    @State private var preservePairingOnFactoryReset = false
     @State private var showTelemetryDeleteAlert = false
     @State private var showPhysicalInfo = false
     @State private var physicalInfoMessage = ""
@@ -45,7 +46,11 @@ struct DeviceSettingsView: View {
     @State private var showWatchFaceConfig = false
     @State private var toast: String? = nil
     @State private var bleSignalStrengthText: String = ""
-    
+    @State private var selectedTelemetryStreamingType: PolarDeviceTelemetryType? = nil
+
+    @State private var isShareSheetPresented = false
+    @State private var appLogFileURL: URL?
+
     var body: some View {
         VStack {
             if case .connected = bleSdkManager.deviceConnectionState {
@@ -237,12 +242,15 @@ struct DeviceSettingsView: View {
                             showFactoryResetAlert = true
                         }
                         .buttonStyle(SecondaryButtonStyle(buttonState: .released))
+
+                        Toggle("Preserve pairing", isOn: $preservePairingOnFactoryReset)
+                            .fixedSize()
                     }
                     .padding()
                     .alert("Confirm Factory Reset", isPresented: $showFactoryResetAlert) {
                         Button("Reset", role: .destructive) {
                             Task {
-                                await await bleSdkManager.doFactoryReset()
+                                await bleSdkManager.doFactoryReset(preservePairingInformation: preservePairingOnFactoryReset)
                             }
                         }
                         Button("Cancel", role: .cancel) {}
@@ -337,7 +345,7 @@ struct DeviceSettingsView: View {
                         Button("Get FTU status",
                                action: {
                             Task {
-                                await await bleSdkManager.getFtuStatus()
+                                await bleSdkManager.getFtuStatus()
                             }
                         })
                         .buttonStyle(SecondaryButtonStyle(buttonState: ButtonState.released))
@@ -483,11 +491,21 @@ struct DeviceSettingsView: View {
                         }.padding(.bottom, 10)
                             .buttonStyle(SecondaryButtonStyle(buttonState: ButtonState.released))
                     }
-                    if bleSdkManager.deviceConnectionState.get().hasSAGRFCFileSystem {
+                    if bleSdkManager.fileTransferFeature.isSupported {
                         HStack {
                             Button("Do user device settings config") {
                                 if bleSdkManager.checkIfDeviceIdSet() {
-                                    showUserDeviceSettingsConfig = true
+                                    Task {
+                                        let settings = await bleSdkManager.getUserDeviceSettings()
+                                        await MainActor.run {
+                                            if settings != nil {
+                                                showUserDeviceSettingsConfig = true
+                                            } else {
+                                                errorMessage = bleSdkManager.userDeviceSettingsError ?? "User device settings file is not readable on device."
+                                                showError = true
+                                            }
+                                        }
+                                    }
                                 } else {
                                     errorMessage = "No device ID available"
                                     showError = true
@@ -602,6 +620,53 @@ struct DeviceSettingsView: View {
                             }).buttonStyle(SecondaryButtonStyle(buttonState: ButtonState.released))
                         }
                     }
+                    if bleSdkManager.watchFaceFeature.isSupported {
+                        HStack {
+                            Button("Configure watch face complications") {
+                                showWatchFaceConfig = true
+                            }
+                            .sheet(isPresented: $showWatchFaceConfig) {
+                                VStack {
+                                    WatchFaceView()
+                                        .environmentObject(bleSdkManager)
+#if targetEnvironment(macCatalyst)
+                                    Button("Close", action: { showWatchFaceConfig = false })
+                                        .padding(.bottom)
+                                        .padding(.top)
+#endif
+                                }
+                            }
+                            .buttonStyle(SecondaryButtonStyle(buttonState: .released))
+                        }
+                    }
+                    if bleSdkManager.telemetryDataStreamingFeature.isSupported {
+                        HStack {
+                            Button(bleSdkManager.isTelemetryStreaming ? "Stop telemetry streaming" : "Start telemetry streaming") {
+                                if selectedTelemetryStreamingType != .none {
+                                    if bleSdkManager.isTelemetryStreaming {
+                                        bleSdkManager.stopTelemetryStreaming(telemetryStreamingType: selectedTelemetryStreamingType!)
+                                    } else {
+                                        bleSdkManager.startTelemetryStreaming(telemetryStreamingType: selectedTelemetryStreamingType!)
+                                    }
+                                } else {
+                                    toast = "Please select a telemetry type to start streaming."
+                                }
+                            }
+                            .buttonStyle(SecondaryButtonStyle(buttonState: bleSdkManager.isTelemetryStreaming ? .pressedDown : .released))
+
+                            Spacer()
+
+                            Picker("Select Telemetry Type", selection: $selectedTelemetryStreamingType) {
+                                Text("None").tag(nil as PolarDeviceTelemetryType?)
+                                if let telemetryTypes = bleSdkManager.supportedTelemetryStreamingTypes?.availableTelemetryTypes {
+                                    ForEach(telemetryTypes, id: \.self) { type in
+                                        Text(type.displayName).tag(type as PolarDeviceTelemetryType?)
+                                    }   
+                                }
+                            }
+                        }
+                        .padding(.vertical, 4)
+                    }
                     if bleSdkManager.fileTransferFeature.isSupported {
 
                         Button(action: {
@@ -643,29 +708,29 @@ struct DeviceSettingsView: View {
                         }
                         .buttonStyle(SecondaryButtonStyle(buttonState: .released))
                     }
-                    if bleSdkManager.watchFaceFeature.isSupported {
-                        HStack {
-                            Button("Configure watch face complications") {
-                                showWatchFaceConfig = true
-                            }
-                            .sheet(isPresented: $showWatchFaceConfig) {
-                                VStack {
-                                    WatchFaceView()
-                                        .environmentObject(bleSdkManager)
-#if targetEnvironment(macCatalyst)
-                                    Button("Close", action: { showWatchFaceConfig = false })
-                                        .padding(.bottom)
-                                        .padding(.top)
-#endif
-                                }
-                            }
-                            .buttonStyle(SecondaryButtonStyle(buttonState: .released))
+
+                    Button("Export PSDC app logs") {
+                        if appLogFileURL == nil {
+                            appLogFileURL = AppLogger.ensureLogFile()
+                        }
+                        if appLogFileURL != nil {
+                            isShareSheetPresented = true
+                        }
+                    }
+                    .buttonStyle(SecondaryButtonStyle(buttonState: .released))
+                    .padding(.top, 10)
+                    .sheet(isPresented: $isShareSheetPresented) {
+                        if let url = appLogFileURL {
+                            ExportLogsView(text: "Export PSDC app logs", fileURL: url)
                         }
                     }
                 }
             } else {
                 Text("Not connected")
             }
+        }
+        .onAppear {
+            appLogFileURL = AppLogger.ensureLogFile()
         }
     }
 

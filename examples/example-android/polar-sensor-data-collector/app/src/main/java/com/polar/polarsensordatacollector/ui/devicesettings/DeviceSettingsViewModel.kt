@@ -16,10 +16,14 @@ import com.polar.sdk.api.model.CheckFirmwareUpdateStatus
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -27,8 +31,12 @@ import javax.inject.Inject
 import android.content.Context
 import android.content.Intent
 import com.polar.polarsensordatacollector.R
-import com.polar.polarsensordatacollector.ui.genericapi.GenericApiActivity
 import com.polar.sdk.api.PolarBleApi
+import com.polar.sdk.api.PolarDeviceTelemetryType
+import com.polar.sdk.api.errors.PolarBleSdkInternalException
+import com.polar.sdk.api.errors.PolarDeviceNotConnected
+import com.polar.sdk.api.errors.PolarDeviceNotFound
+import com.polar.sdk.api.errors.PolarServiceNotAvailable
 import com.polar.sdk.api.model.PolarDiskSpaceData
 import com.polar.sdk.api.model.PolarPhysicalConfiguration
 import java.time.LocalDate
@@ -58,7 +66,8 @@ data class SecurityUiState(
 )
 
 data class BleMultiConnectionUiState(
-    val isEnabled: Boolean = false
+    val isEnabled: Boolean = false,
+    val isSwitchEnabled: Boolean = true
 )
 
 data class SleepRecordingState(
@@ -74,7 +83,13 @@ data class DeviceToHostNotificationsUiState(
 )
 
 data class SensorInitiatedSecurityModeUiState(
-    val isEnabled: Boolean = false
+    val isEnabled: Boolean = false,
+    val isSwitchEnabled: Boolean = true
+)
+
+data class TelemetryUiState(
+    val isEnabled: Boolean = false,
+    val isAvailable: Boolean = false
 )
 
 @HiltViewModel
@@ -88,16 +103,16 @@ internal class DeviceSettingsViewModel @Inject constructor(
         private const val TAG = "DeviceSettingsViewModel"
     }
 
-    private val deviceId: String = state.get<String>(ONLINE_OFFLINE_KEY_DEVICE_ID) ?: throw Exception("Device settings viewModel must know the deviceId")
+    private val identifier: String = state.get<String>(ONLINE_OFFLINE_KEY_DEVICE_ID) ?: throw Exception("Device settings viewModel must know the identifier")
 
-    private val _uiDeviceId = MutableStateFlow(deviceId)
-    val uiDeviceId: StateFlow<String> = _uiDeviceId.asStateFlow()
+    private val _uiIdentifier = MutableStateFlow(identifier)
+    val uiIdentifier: StateFlow<String> = _uiIdentifier.asStateFlow()
 
-    private val _uiShowError: MutableStateFlow<MessageUiState> = MutableStateFlow(MessageUiState("", ""))
-    val uiShowError: StateFlow<MessageUiState> = _uiShowError.asStateFlow()
+    private val _uiShowError = MutableSharedFlow<MessageUiState>(extraBufferCapacity = 1)
+    val uiShowError: SharedFlow<MessageUiState> = _uiShowError.asSharedFlow()
 
-    private val _uiShowInfo: MutableStateFlow<MessageUiState> = MutableStateFlow(MessageUiState("", ""))
-    val uiShowInfo: StateFlow<MessageUiState> = _uiShowInfo.asStateFlow()
+    private val _uiShowInfo = MutableSharedFlow<MessageUiState>(extraBufferCapacity = 1)
+    val uiShowInfo: SharedFlow<MessageUiState> = _uiShowInfo.asSharedFlow()
 
     private val _uiSdkModeState = MutableStateFlow(SdkModeUiState())
     val uiSdkModeState: StateFlow<SdkModeUiState> = _uiSdkModeState.asStateFlow()
@@ -146,10 +161,21 @@ internal class DeviceSettingsViewModel @Inject constructor(
     val watchFaceConfigAvailable: StateFlow<Boolean> = _watchFaceConfigAvailable.asStateFlow()
 
     private var d2hNotificationsJob: Job? = null
+    private var sleepRecordingStateJob: Job? = null
+    private var telemetryData: MutableList<ByteArray> = mutableListOf()
+
+    private val _telemetryAvailable = MutableStateFlow(false)
+    val telemetryAvailable: StateFlow<Boolean> = _telemetryAvailable.asStateFlow()
+
+    private val _uiTelemetryState: MutableStateFlow<TelemetryUiState> = MutableStateFlow(TelemetryUiState())
+    val uiTelemetryState: StateFlow<TelemetryUiState> = _uiTelemetryState.asStateFlow()
+    lateinit var selectedTelemetryType: PolarDeviceTelemetryType
+    private var chunkIndex: Int = 0
 
     init {
         viewModelScope.launch {
             polarDeviceStreamingRepository.sdkModeState
+                .filter { it.identifier == identifier }
                 .collect { sdkMode ->
                     updateSdkModeUiState(
                         isAvailable = sdkMode.isAvailable,
@@ -162,6 +188,7 @@ internal class DeviceSettingsViewModel @Inject constructor(
 
         viewModelScope.launch {
             polarDeviceStreamingRepository.availableFeatures
+                .filter { it.identifier == identifier }
                 .collect { deviceStreamsAvailable ->
                     if (deviceStreamsAvailable.availableOfflineFeatures.any { it.value == true }) {
                         updateUiOfflineRecordingSettings(offlineRecordingEnabled = true)
@@ -179,33 +206,37 @@ internal class DeviceSettingsViewModel @Inject constructor(
         }
 
         viewModelScope.launch {
-            polarDeviceStreamingRepository.isMultiBleModeEnabled
-                .collect { isEnabled ->
-                    _uiMultiBleModeState.update { BleMultiConnectionUiState(isEnabled) }
-                }
-        }
-
-        viewModelScope.launch {
-            polarDeviceStreamingRepository.isSensorInitiatedSecurityModeEnabled
-                .collect { isEnabled ->
-                    _uiSensorInitiatedSecurityModeState.update { SensorInitiatedSecurityModeUiState(isEnabled) }
-                }
-        }
-
-        viewModelScope.launch {
-            polarDeviceStreamingRepository.deviceSupportsSettings
-                .collect { support ->
-                    _uiSettingsSupportUiState.update { support }
-                }
-        }
-
-        viewModelScope.launch {
             polarDeviceStreamingRepository.sdkFeaturesReady
+                .filter { it.identifier == identifier }
                 .collect { event ->
                     _watchFaceConfigAvailable.update {
                         event.readyFeatures.contains(PolarBleApi.PolarBleSdkFeature.FEATURE_WATCH_FACES_CONFIGURATION)
                     }
                 }
+        }
+
+        viewModelScope.launch {
+            polarDeviceStreamingRepository.sdkFeaturesReady
+                .filter { it.identifier == identifier }
+                .collect { event -> _telemetryAvailable.update {
+                        event.readyFeatures.contains(PolarBleApi.PolarBleSdkFeature.FEATURE_TELEMETRY)
+                    }
+                }
+        }
+
+        viewModelScope.launch {
+            var isEnabled = false
+            var isAvailable = false
+            polarDeviceStreamingRepository.isTelemetryEnabled
+                .collect { enabled ->
+                    isEnabled = enabled
+                }
+            polarDeviceStreamingRepository.isTelemetryAvailable
+                .collect { available ->
+                    isAvailable = available
+                }
+
+            updateTelemetryUiState(isEnabled, isAvailable)
         }
 
         getSdkModeStatus()
@@ -221,6 +252,7 @@ internal class DeviceSettingsViewModel @Inject constructor(
     override fun onCleared() {
         super.onCleared()
         d2hNotificationsJob?.cancel()
+        sleepRecordingStateJob?.cancel()
     }
 
     private fun updateUiOfflineRecordingSettings(offlineRecordingEnabled: Boolean) {
@@ -232,19 +264,19 @@ internal class DeviceSettingsViewModel @Inject constructor(
 
     fun sdkModeToggle() {
         viewModelScope.launch(Dispatchers.IO) {
-            polarDeviceStreamingRepository.sdkModeToggle(deviceId)
+            polarDeviceStreamingRepository.sdkModeToggle(identifier)
         }
     }
 
     fun sdkModeLedAnimation() {
         viewModelScope.launch {
-            polarDeviceStreamingRepository.setSdkModeLedConfig(deviceId)
+            polarDeviceStreamingRepository.setSdkModeLedConfig(identifier)
         }
     }
 
     fun ppiModeLedAnimation() {
         viewModelScope.launch {
-            polarDeviceStreamingRepository.setPpiModeLedConfig(deviceId)
+            polarDeviceStreamingRepository.setPpiModeLedConfig(identifier)
         }
     }
 
@@ -261,7 +293,7 @@ internal class DeviceSettingsViewModel @Inject constructor(
     private fun startDeviceToHostNotifications() {
         d2hNotificationsJob = viewModelScope.launch {
             _uiDeviceToHostNotificationsState.update { it.copy(isObserving = true) }
-            polarDeviceStreamingRepository.observeDeviceToHostNotifications(deviceId)
+            polarDeviceStreamingRepository.observeDeviceToHostNotifications(identifier)
                 .catch { error ->
                     _uiDeviceToHostNotificationsState.update { it.copy(isObserving = false) }
                     showError("D2H Notification failed", error.toString())
@@ -286,14 +318,14 @@ internal class DeviceSettingsViewModel @Inject constructor(
 
     fun openPhysicalConfigActivity(context: Context) {
         val intent = Intent(context, PhysicalConfigActivity::class.java)
-        intent.putExtra(ONLINE_OFFLINE_KEY_DEVICE_ID, deviceId)
+        intent.putExtra(ONLINE_OFFLINE_KEY_DEVICE_ID, identifier)
         context.startActivity(intent)
     }
 
     fun getFtuInfo() {
         viewModelScope.launch {
             try {
-                val result = polarDeviceStreamingRepository.getFtuInfo(deviceId)
+                val result = polarDeviceStreamingRepository.getFtuInfo(identifier)
                 showInfo("Has FTU been done", result.toString())
             } catch (error: Exception) {
                 showError("Fetching FTU information failed", error.toString())
@@ -303,7 +335,7 @@ internal class DeviceSettingsViewModel @Inject constructor(
 
     suspend fun getUserPhysicalInfo() {
         viewModelScope.run {
-            when (val result = polarDeviceStreamingRepository.getUserPhysicalConfiguration(deviceId)) {
+            when (val result = polarDeviceStreamingRepository.getUserPhysicalConfiguration(identifier)) {
                 is ResultOfRequest.Success -> {
                     physInfo = result.value
                 }
@@ -318,7 +350,7 @@ internal class DeviceSettingsViewModel @Inject constructor(
     fun doRestart() {
         viewModelScope.launch {
             try {
-                polarDeviceStreamingRepository.doRestart(deviceId)
+                polarDeviceStreamingRepository.doRestart(identifier)
                 Log.d(TAG, "Device is restarting")
             } catch (error: Exception) {
                 Log.e(TAG, "Device restart failed: $error")
@@ -326,20 +358,26 @@ internal class DeviceSettingsViewModel @Inject constructor(
         }
     }
 
-    fun doFactoryReset() {
+    fun doFactoryReset(preservePairingInformation: Boolean = false) {
         viewModelScope.launch {
             try {
-                polarDeviceStreamingRepository.doFactoryReset(deviceId)
-                Log.d(TAG, "Factory reset on device $deviceId is ongoing.")
+                polarDeviceStreamingRepository.doFactoryReset(identifier, preservePairingInformation)
+                Log.d(TAG, "Factory reset on device $identifier is ongoing. preservePairingInformation=$preservePairingInformation")
+                showInfo(
+                    "Factory reset",
+                    "Factory reset triggered on device $identifier." +
+                            if (preservePairingInformation) " Pairing information will be preserved." else ""
+                )
             } catch (error: Exception) {
                 Log.e(TAG, "Factory reset failed: $error")
+                showError("Factory reset failed", error.message ?: error.toString())
             }
         }
     }
 
     fun doFirmwareUpdate(firmwareUrl: String = "") {
         viewModelScope.launch {
-            polarDeviceStreamingRepository.doFirmwareUpdate(deviceId, firmwareUrl)
+            polarDeviceStreamingRepository.doFirmwareUpdate(identifier, firmwareUrl)
                 .catch { throwable ->
                     _uiFirmwareUpdateStatus.value = FirmwareUpdateStatus.FwUpdateFailed("${throwable.message}").toString()
                     showError("Firmware update failed", errorDescription = throwable.message.toString())
@@ -355,9 +393,62 @@ internal class DeviceSettingsViewModel @Inject constructor(
         }
     }
 
+    fun startTelemetryStream(telemetryType: PolarDeviceTelemetryType) {
+        if (telemetryType != null) {
+            val telemetryConfig = polarDeviceStreamingRepository.getDeviceTelemetryConfiguration(telemetryType, identifier)
+            if (telemetryConfig.supportedFeatures == null || telemetryConfig.supportedFeatures != 0) {
+                showInfo(
+                    "Telemetry not supported:",
+                    "Telemetry type ${telemetryType.name} is not supported on this device."
+                )
+                return
+            }
+            selectedTelemetryType = telemetryType
+            viewModelScope.launch(Dispatchers.IO) {
+                showInfo(
+                    "Telemetry configuration:",
+                    "deviceIdentifier=${telemetryConfig.deviceIdentifier}, dataUri=${telemetryConfig.dataUri}, supportedFeatures=${telemetryConfig.supportedFeatures}",
+                    2
+                )
+                try {
+                    polarDeviceStreamingRepository.startTelemetry(telemetryType, identifier)
+                        .collect { event ->
+                            chunkIndex++
+                            Log.d(
+                                TAG,
+                                "Telemetry chunk received: ${event.payload.size}  bytes (total $chunkIndex chunks)"
+                            )
+                            showInfo(
+                                "Telemetry chunk #$chunkIndex received bytes (total $chunkIndex chunks)",
+                                "${event.payload.size.toString()} from device $identifier",
+                                2
+                            )
+                        }
+                } catch (error: Exception) {
+                    showError("Telemetry stream failed", error.toString())
+                    throw error
+                }
+            }
+        }
+    }
+
+    fun stopTelemetryStream() {
+        if (selectedTelemetryType != null) {
+            viewModelScope.launch {
+                try {
+                    polarDeviceStreamingRepository.stopTelemetry(selectedTelemetryType, identifier)
+                    showInfo("Telemetry stream stopped", "", 10)
+                } catch (error: Exception) {
+                    Log.e(TAG, "Telemetry stream stop failed: $error.toString()")
+                    showError("Telemetry stream stop failed", error.toString())
+                }
+            }
+        }
+    }
+
     private fun checkFirmwareUpdate() {
         viewModelScope.launch {
-            polarDeviceStreamingRepository.checkFirmwareUpdate(deviceId)
+            polarDeviceStreamingRepository.checkFirmwareUpdate(identifier)
                 .catch { throwable ->
                     _uiCheckFirmwareUpdateStatus.value = CheckFirmwareUpdateStatus.CheckFwUpdateFailed(
                         application.getString(R.string.firmware_update_check_failed)
@@ -386,16 +477,36 @@ internal class DeviceSettingsViewModel @Inject constructor(
     }
 
     fun openUserDeviceSettingsActivity(context: Context) {
-        val intent = Intent(context, UserDeviceSettingsActivity::class.java)
-        intent.putExtra("DEVICE_ID", deviceId)
-        context.startActivity(intent)
+        viewModelScope.launch {
+            when (val result = polarDeviceStreamingRepository.getDeviceUserSettings(identifier)) {
+                is ResultOfRequest.Success -> {
+                    if (result.value != null) {
+                        val intent = Intent(context, UserDeviceSettingsActivity::class.java)
+                        intent.putExtra("IDENTIFIER", identifier)
+                        context.startActivity(intent)
+                    } else {
+                        showError(
+                            application.getString(R.string.cannot_open_user_device_settings),
+                            application.getString(R.string.user_device_settings_file_not_readable)
+                        )
+                    }
+                }
+
+                is ResultOfRequest.Failure -> {
+                    showError(
+                        application.getString(R.string.cannot_open_user_device_settings),
+                        describeUserDeviceSettingsError(result.throwable, result.message)
+                    )
+                }
+            }
+        }
     }
 
     private fun setDeviceUserLocationDefault() = viewModelScope.launch {
         try {
             withContext(Dispatchers.IO) {
                 if (polarDeviceStreamingRepository.deviceSupportsSettings.value) {
-                    when (val result = polarDeviceStreamingRepository.getDeviceUserSettings(deviceId)) {
+                    when (val result = polarDeviceStreamingRepository.getDeviceUserSettings(identifier)) {
                         is ResultOfRequest.Success -> {
                             result.value?.let {
                                 val deviceLocation = it.deviceLocation
@@ -427,12 +538,12 @@ internal class DeviceSettingsViewModel @Inject constructor(
     fun deleteStoredDeviceFiles(storedDataType: PolarBleApi.PolarStoredDataType, untilDate: LocalDate) = viewModelScope.launch {
         try {
             withContext(Dispatchers.IO) {
-                when (val result = polarDeviceStreamingRepository.deleteDeviceData(deviceId, storedDataType, untilDate)) {
+                when (val result = polarDeviceStreamingRepository.deleteDeviceData(identifier, storedDataType, untilDate)) {
                     is ResultOfRequest.Success -> {
                         showInfo("Successfully deleted $storedDataType files until $untilDate")
                     }
                     is ResultOfRequest.Failure -> {
-                        showError("Failure in deleting $storedDataType files from device $deviceId")
+                        showError("Failure in deleting $storedDataType files from device $identifier")
                     }
                 }
             }
@@ -445,12 +556,12 @@ internal class DeviceSettingsViewModel @Inject constructor(
     fun deleteDateFolders(fromDate: LocalDate?, toDate: LocalDate?) = viewModelScope.launch {
         try {
             withContext(Dispatchers.IO) {
-                when (polarDeviceStreamingRepository.deleteDeviceDateFolders(deviceId, fromDate, toDate)) {
+                when (polarDeviceStreamingRepository.deleteDeviceDateFolders(identifier, fromDate, toDate)) {
                     is ResultOfRequest.Success -> {
                         showInfo("Successfully deleted date folders from: $fromDate to: $toDate")
                     }
                     is ResultOfRequest.Failure -> {
-                        showError("Failure in deleting files from device: $deviceId")
+                        showError("Failure in deleting files from device: $identifier")
                     }
                 }
             }
@@ -463,12 +574,12 @@ internal class DeviceSettingsViewModel @Inject constructor(
     fun deleteTelemetryData() = viewModelScope.launch {
         try {
             withContext(Dispatchers.IO) {
-                when (polarDeviceStreamingRepository.deleteTelemetryData(deviceId)) {
+                when (polarDeviceStreamingRepository.deleteTelemetryData(identifier)) {
                     is ResultOfRequest.Success -> {
                         showInfo("Successfully deleted all telemetry data files")
                     }
                     is ResultOfRequest.Failure -> {
-                        showError("Failure in deleting telemetry data files from device: $deviceId")
+                        showError("Failure in deleting telemetry data files from device: $identifier")
                     }
                 }
             }
@@ -484,7 +595,7 @@ internal class DeviceSettingsViewModel @Inject constructor(
         viewModelScope.launch {
             val timeNow = LocalDateTime.now()
 
-            when (val result = polarDeviceStreamingRepository.setTime(deviceId, timeNow)) {
+            when (val result = polarDeviceStreamingRepository.setTime(identifier, timeNow)) {
                 is ResultOfRequest.Success -> {
                     withContext(Dispatchers.Main) {
                         _uiWriteTimeStatus.value = StatusWriteTime.Completed
@@ -505,9 +616,9 @@ internal class DeviceSettingsViewModel @Inject constructor(
         _uiReadTimeStatus.value = StatusReadTime.InProgress
         viewModelScope.launch {
             try {
-                val dateTime = polarDeviceStreamingRepository.getTime(deviceId)
+                val dateTime = polarDeviceStreamingRepository.getTime(identifier)
                 _uiReadTimeStatus.value = StatusReadTime.Completed
-                showInfo("Device time set", DateTimeFormatter.ISO_DATE_TIME.format(dateTime))
+                showInfo("Device time get", DateTimeFormatter.ISO_DATE_TIME.format(dateTime))
             } catch (error: Exception) {
                 _uiReadTimeStatus.value = StatusReadTime.Completed
                 showError("Get time failed", error.toString())
@@ -518,15 +629,15 @@ internal class DeviceSettingsViewModel @Inject constructor(
     fun toggleSecurity(isChecked: Boolean) {
         Log.d(TAG, "toggleSecret to state $isChecked ")
         viewModelScope.launch(Dispatchers.IO) {
-            polarDeviceStreamingRepository.toggleSecurity(deviceId, isChecked)
+            polarDeviceStreamingRepository.toggleSecurity(identifier, isChecked)
         }
     }
 
     fun setWarehouseSleep() {
         viewModelScope.launch {
             try {
-                polarDeviceStreamingRepository.setWarehouseSleep(deviceId)
-                Log.d(TAG, "Warehouse sleep mode set for device $deviceId")
+                polarDeviceStreamingRepository.setWarehouseSleep(identifier)
+                Log.d(TAG, "Warehouse sleep mode set for device $identifier")
             } catch (error: Exception) {
                 Log.e(TAG, "Setting warehouse sleep failed: $error")
             }
@@ -536,8 +647,8 @@ internal class DeviceSettingsViewModel @Inject constructor(
     fun setHibernateMode() {
         viewModelScope.launch {
             try {
-                polarDeviceStreamingRepository.setHibernateMode(deviceId)
-                Log.d(TAG, "Hibernate mode set for device $deviceId")
+                polarDeviceStreamingRepository.setHibernateMode(identifier)
+                Log.d(TAG, "Hibernate mode set for device $identifier")
             } catch (error: Exception) {
                 Log.e(TAG, "Setting hibernate mode failed: $error")
             }
@@ -547,10 +658,10 @@ internal class DeviceSettingsViewModel @Inject constructor(
     fun setTurnDeviceOff() {
         viewModelScope.launch {
             try {
-                polarDeviceStreamingRepository.turnDeviceOff(deviceId)
-                Log.d(TAG, "Device $deviceId turn off succeeded")
+                polarDeviceStreamingRepository.turnDeviceOff(identifier)
+                Log.d(TAG, "Device $identifier turn off succeeded")
             } catch (error: Exception) {
-                Log.e(TAG, "Device $deviceId turn off failed: $error")
+                Log.e(TAG, "Device $identifier turn off failed: $error")
             }
         }
     }
@@ -558,7 +669,7 @@ internal class DeviceSettingsViewModel @Inject constructor(
     fun waitForConnection() {
         viewModelScope.launch {
             try {
-                polarDeviceStreamingRepository.waitForConnection(deviceId)
+                polarDeviceStreamingRepository.waitForConnection(identifier)
                 _connectionStatus.value = true
             } catch (error: Exception) {
                 _connectionStatus.value = false
@@ -569,7 +680,7 @@ internal class DeviceSettingsViewModel @Inject constructor(
 
     fun getDiskSpace(onSuccess: (PolarDiskSpaceData) -> Unit, onError: (String) -> Unit) {
         viewModelScope.launch {
-            when (val result = polarDeviceStreamingRepository.getDiskSpace(deviceId)) {
+            when (val result = polarDeviceStreamingRepository.getDiskSpace(identifier)) {
                 is ResultOfRequest.Success -> result.value?.let { onSuccess(it) }
                 is ResultOfRequest.Failure -> onError(result.message)
             }
@@ -579,10 +690,12 @@ internal class DeviceSettingsViewModel @Inject constructor(
     fun setBleMultiConnection(enabled: Boolean = false) {
         viewModelScope.launch {
             try {
-                polarDeviceStreamingRepository.setBleMultiConnectionMode(deviceId, enabled)
-                Log.d(TAG, "Set BLE dual connection mode to $enabled on device $deviceId.")
+                polarDeviceStreamingRepository.setBleMultiConnectionMode(identifier, enabled)
+                Log.d(TAG, "Set BLE dual connection mode to $enabled on device $identifier.")
             } catch (error: Exception) {
                 Log.e(TAG, "Setting BLE dual connection mode to $enabled failed: $error")
+                _uiMultiBleModeState.update { it.copy(isSwitchEnabled = false) }
+                showError("Failed to set BLE multi connection mode to $enabled.", error.toString())
             }
         }
     }
@@ -590,10 +703,12 @@ internal class DeviceSettingsViewModel @Inject constructor(
     fun setSensorInitiatedSecurityMode(enabled: Boolean = false) {
         viewModelScope.launch {
             try {
-                polarDeviceStreamingRepository.setSensorInitiatedSecurityMode(deviceId, enabled)
-                Log.d(TAG, "Set sensor initiated security mode to $enabled on device $deviceId.")
+                polarDeviceStreamingRepository.setSensorInitiatedSecurityMode(identifier, enabled)
+                Log.d(TAG, "Set sensor initiated security mode to $enabled on device $identifier.")
             } catch (error: Exception) {
                 Log.e(TAG, "Set sensor initiated security mode to $enabled failed: $error")
+                _uiSensorInitiatedSecurityModeState.update { it.copy(isSwitchEnabled = false) }
+                showError("Failed to set sensor initiated security mode to  $enabled.", error.toString())
             }
         }
     }
@@ -601,7 +716,7 @@ internal class DeviceSettingsViewModel @Inject constructor(
     fun forceStopSleep() = viewModelScope.launch {
         try {
             withContext(Dispatchers.IO) {
-                when (val result = polarDeviceStreamingRepository.forceStopSleep(deviceId)) {
+                when (val result = polarDeviceStreamingRepository.forceStopSleep(identifier)) {
                     is ResultOfRequest.Success -> {
                         result.value?.let {
                             showInfo("Sleep recording successfully stopped.")
@@ -620,10 +735,34 @@ internal class DeviceSettingsViewModel @Inject constructor(
         }
     }
 
+
+
+    fun getSleepRecordingState() = viewModelScope.launch {
+        try {
+            withContext(Dispatchers.IO) {
+                when (val result = polarDeviceStreamingRepository.getSleepRecordingState(identifier)) {
+                    is ResultOfRequest.Success -> {
+                        result.value?.let {
+                            showInfo("Sleep ${if (result.value) "is" else "is not"} available.")
+                        } ?: kotlin.run {
+                            showError("Failed to get sleep recording state.")
+                        }
+                    }
+                    is ResultOfRequest.Failure -> {
+                        showError(result.message, result.throwable?.toString() ?: "")
+                    }
+                }
+            }
+        } catch (e: Throwable) {
+            Log.e(TAG, "Error getting sleep recording status: ${e.message}", e)
+            showError(e.message ?: "Failed to get sleep recording state")
+        }
+    }
+
     fun getChargeState() = viewModelScope.launch {
         try {
             withContext(Dispatchers.IO) {
-                when (val result = polarDeviceStreamingRepository.getChargeInformation(deviceId)) {
+                when (val result = polarDeviceStreamingRepository.getChargeInformation(identifier)) {
                     is ResultOfRequest.Success -> {
                         result.value?.let {
                             showInfo("Charger information:\n" +
@@ -647,7 +786,7 @@ internal class DeviceSettingsViewModel @Inject constructor(
     fun  checkIfDeviceDisconnectedDueRemovedPairing() = viewModelScope.launch {
         try {
             withContext(Dispatchers.IO) {
-                when (val result = polarDeviceStreamingRepository. checkIfDeviceDisconnectedDueRemovedPairing(deviceId)) {
+                when (val result = polarDeviceStreamingRepository. checkIfDeviceDisconnectedDueRemovedPairing(identifier)) {
                     is ResultOfRequest.Success -> {
                         result.value?.let {
                             showInfo("Pairing was disconnected due to pairing problem?\n" +
@@ -672,7 +811,7 @@ internal class DeviceSettingsViewModel @Inject constructor(
 
     fun getBLESignalStrength() = viewModelScope.launch {
         withContext(Dispatchers.IO) {
-            when (val result = polarDeviceStreamingRepository.getBleSignalStrength(deviceId)) {
+            when (val result = polarDeviceStreamingRepository.getBleSignalStrength(identifier)) {
                 is ResultOfRequest.Success -> {
                     result.value?.let {
                         showInfo("RSSI: ${result.value} dBm")
@@ -688,8 +827,9 @@ internal class DeviceSettingsViewModel @Inject constructor(
     }
 
     private fun observeSleepRecordingState() {
-        viewModelScope.launch {
-            polarDeviceStreamingRepository.observeSleepRecordingState(deviceId)
+        sleepRecordingStateJob?.cancel()
+        sleepRecordingStateJob = viewModelScope.launch {
+            polarDeviceStreamingRepository.observeSleepRecordingState(identifier)
                 .catch { error ->
                     Log.w(TAG, "Observing sleep recording state failed: ${error.message ?: error.toString()}")
                 }
@@ -703,36 +843,37 @@ internal class DeviceSettingsViewModel @Inject constructor(
     private fun getSdkModeStatus() {
         Log.d(TAG, "getSdkModeStatus()")
         viewModelScope.launch(Dispatchers.IO) {
-            polarDeviceStreamingRepository.isSdkModeEnabled(deviceId)
+            polarDeviceStreamingRepository.isSdkModeEnabled(identifier)
         }
     }
 
     private fun getSecurityStatus() {
         Log.d(TAG, "getSdkModeStatus()")
         viewModelScope.launch(Dispatchers.IO) {
-            polarDeviceStreamingRepository.isSecurityEnabled(deviceId)
+            polarDeviceStreamingRepository.isSecurityEnabled(identifier)
         }
     }
 
     private fun getBleMultiConnectionModeStatus() {
         Log.d(TAG, "getBleMultiConnectionMode()")
         viewModelScope.launch(Dispatchers.IO) {
-            polarDeviceStreamingRepository.getMultiBleModeEnabled(deviceId)
+            val isEnabled = polarDeviceStreamingRepository.getMultiBleModeEnabled(identifier)
+            _uiMultiBleModeState.update { BleMultiConnectionUiState(isEnabled) }
         }
     }
 
     private fun getSensorInitiatedSecurityModeEnabledStatus() {
         Log.d(TAG, "getSensorInitiatedSecurityMode()")
         viewModelScope.launch(Dispatchers.IO) {
-            polarDeviceStreamingRepository.getSensorInitiatedSecurityModeEnabled(deviceId)
+            val isEnabled = polarDeviceStreamingRepository.getSensorInitiatedSecurityModeEnabled(identifier)
+            _uiSensorInitiatedSecurityModeState.update { SensorInitiatedSecurityModeUiState(isEnabled) }
         }
     }
 
     private fun getDeviceSettingsSupportUiState() {
         Log.d(TAG, "getDeviceSettingsSupportUiState()")
-        viewModelScope.launch(Dispatchers.IO) {
-            polarDeviceStreamingRepository.deviceSupportsSettings
-        }
+        val supports = polarDeviceStreamingRepository.getDeviceSupportsSettings(identifier)
+        _uiSettingsSupportUiState.update { supports }
     }
 
     private fun updateSdkModeUiState(isAvailable: Boolean = false, isEnabled: SdkMode.STATE, sdkModeLedState: SdkMode.STATE, ppiModeLedState: SdkMode.STATE) {
@@ -747,16 +888,31 @@ internal class DeviceSettingsViewModel @Inject constructor(
         }
     }
 
-    private fun showError(errorHeader: String, errorDescription: String = "") {
-        Log.e(TAG, " Error: $errorHeader ${if (errorDescription.isNotEmpty()) "Description: $errorDescription" else ""}")
-        _uiShowError.update {
-            MessageUiState(errorHeader, errorDescription)
+    private fun updateTelemetryUiState(telemetryEnabled: Boolean, telemetryAvailable: Boolean) {
+        _uiTelemetryState.update {
+            it.copy(isEnabled = telemetryEnabled)
+            it.copy(isAvailable = telemetryAvailable)
         }
     }
 
-    private fun showInfo(header: String, description: String = "") {
-        _uiShowInfo.update {
-            MessageUiState(header, description)
+    private fun showError(errorHeader: String, errorDescription: String = "") {
+        Log.e(TAG, " Error: $errorHeader ${if (errorDescription.isNotEmpty()) "Description: $errorDescription" else ""}")
+        _uiShowError.tryEmit(MessageUiState(errorHeader, errorDescription))
+    }
+
+    private fun describeUserDeviceSettingsError(throwable: Throwable?, fallbackMessage: String): String {
+        return when (throwable) {
+            is PolarDeviceNotFound -> application.getString(R.string.user_device_settings_device_session_not_found)
+            is PolarDeviceNotConnected -> application.getString(R.string.user_device_settings_device_not_connected)
+            is PolarServiceNotAvailable -> application.getString(R.string.user_device_settings_service_not_found)
+            is PolarBleSdkInternalException -> throwable.message
+                ?: application.getString(R.string.user_device_settings_file_not_readable)
+            null -> fallbackMessage
+            else -> throwable.message ?: fallbackMessage
         }
+    }
+
+    private fun showInfo(header: String, description: String = "", timeout: Long? = null) {
+        _uiShowInfo.tryEmit(MessageUiState(header, description, timeout))
     }
 }

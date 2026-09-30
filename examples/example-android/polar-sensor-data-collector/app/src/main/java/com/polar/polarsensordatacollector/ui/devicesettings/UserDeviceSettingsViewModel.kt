@@ -6,6 +6,10 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.polar.polarsensordatacollector.R
 import com.polar.polarsensordatacollector.repository.PolarDeviceRepository
+import com.polar.sdk.api.errors.PolarBleSdkInternalException
+import com.polar.sdk.api.errors.PolarDeviceNotConnected
+import com.polar.sdk.api.errors.PolarDeviceNotFound
+import com.polar.sdk.api.errors.PolarServiceNotAvailable
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -21,11 +25,11 @@ internal class UserDeviceSettingsViewModel @Inject constructor(
 ) : ViewModel() {
 
     companion object {
-        const val KEY_DEVICE_ID = "DEVICE_ID"
+        const val KEY_IDENTIFIER = "IDENTIFIER"
     }
 
-    private val deviceId: String = savedStateHandle[KEY_DEVICE_ID]
-        ?: throw IllegalArgumentException("UserDeviceSettingsViewModel requires DEVICE_ID")
+    private val identifier: String = savedStateHandle[KEY_IDENTIFIER]
+        ?: throw IllegalArgumentException("UserDeviceSettingsViewModel requires IDENTIFIER")
 
     private val _uiState = MutableStateFlow(UserDeviceSettingsUiState())
     val uiState: StateFlow<UserDeviceSettingsUiState> = _uiState.asStateFlow()
@@ -48,22 +52,22 @@ internal class UserDeviceSettingsViewModel @Inject constructor(
     ) {
         viewModelScope.launch {
             try {
-                repository.setUserDeviceLocation(deviceId, deviceLocation)
-                repository.setUsbConnectionMode(deviceId, usbEnabled)
+                repository.setUserDeviceLocation(identifier, deviceLocation)
+                repository.setUsbConnectionMode(identifier, usbEnabled)
                 repository.setAutomaticTrainingDetectionSettings(
-                    deviceId,
+                    identifier,
                     atdEnabled,
                     atdSensitivity,
                     atdMinDuration
                 )
-                repository.setTelemetryEnabled(deviceId, telemetryEnabled)
-                repository.setDaylightSavingTime(deviceId)
-                repository.setAutosFilesEnabled(deviceId, autosFilesEnabled)
+                repository.setTelemetryEnabled(identifier, telemetryEnabled)
+                repository.setDaylightSavingTime(identifier)
+                repository.setAutosFilesEnabled(identifier, autosFilesEnabled)
                 _message.value = application.getString(R.string.user_device_settings_saved)
             } catch (e: Exception) {
                 _message.value = application.getString(
                     R.string.failed_to_save_settings,
-                    e.localizedMessage
+                    describeUserDeviceSettingsError(e)
                 )
             }
         }
@@ -72,7 +76,7 @@ internal class UserDeviceSettingsViewModel @Inject constructor(
     private fun loadSettings() {
         viewModelScope.launch {
             try {
-                val settings = repository.getUserDeviceSettings(deviceId)
+                val settings = repository.getUserDeviceSettings(identifier)
                 _uiState.value = _uiState.value.copy(
                     deviceLocation = settings.deviceLocation,
                     usbEnabled = settings.usbConnectionMode ?: false,
@@ -86,10 +90,21 @@ internal class UserDeviceSettingsViewModel @Inject constructor(
             } catch (e: Exception) {
                 _message.value = application.getString(
                     R.string.failed_to_load_settings,
-                    e.localizedMessage
+                    describeUserDeviceSettingsError(e)
                 )
                 _uiState.value = _uiState.value.copy(isLoading = false)
             }
+        }
+    }
+
+    private fun describeUserDeviceSettingsError(error: Throwable): String {
+        return when (error) {
+            is PolarDeviceNotFound -> application.getString(R.string.user_device_settings_device_session_not_found)
+            is PolarDeviceNotConnected -> application.getString(R.string.user_device_settings_device_not_connected)
+            is PolarServiceNotAvailable -> application.getString(R.string.user_device_settings_service_not_found)
+            is PolarBleSdkInternalException -> error.message
+                ?: application.getString(R.string.user_device_settings_file_not_readable)
+            else -> error.localizedMessage ?: application.getString(R.string.unknown_error)
         }
     }
 

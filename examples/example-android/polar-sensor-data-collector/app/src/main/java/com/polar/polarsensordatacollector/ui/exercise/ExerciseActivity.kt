@@ -44,7 +44,7 @@ class ExerciseActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        deviceId = polarDeviceRepository.deviceConnectionStatus.value.deviceId
+        deviceId = polarDeviceRepository.deviceConnectionStatus.value.identifier
         if (deviceId.isEmpty()) {
             toast(getString(R.string.toast_no_device))
             finish(); return
@@ -70,7 +70,10 @@ class ExerciseActivity : AppCompatActivity() {
                     },
                     onPause = { toast(getString(R.string.toast_pausing)); viewModel.pause() },
                     onResume = { toast(getString(R.string.toast_resuming)); viewModel.resume() },
-                    onStop = { toast(getString(R.string.toast_stopping)); viewModel.stop() },
+                    onStop = { save ->
+                        toast(getString(R.string.toast_stopping))
+                        viewModel.stop(save)
+                    },
                     onStatusToast = { msg -> toast(msg) }
                 )
             }

@@ -99,7 +99,7 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginStart="10dp"
-                        android:text="get"
+                         android:text="@string/get_lowercase"
                         android:textAppearance="?attr/textAppearanceSubtitle1"
                         app:layout_constraintEnd_toEndOf="parent"
                         app:layout_constraintStart_toEndOf="@+id/get_ftu_header"
@@ -174,6 +174,28 @@
                         android:textAppearance="?attr/textAppearanceSubtitle1"
                         app:layout_constraintStart_toEndOf="@+id/do_factory_reset_header"
                         app:layout_constraintTop_toTopOf="parent" />
+
+                    <TextView
+                        android:id="@+id/do_factory_reset_preserve_pairing_label"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="16dp"
+                        android:text="@string/do_factory_reset_switch_header"
+                        android:textAppearance="@android:style/TextAppearance.Material.Caption"
+                        app:layout_constraintBaseline_toBaselineOf="@+id/do_factory_reset_button"
+                        app:layout_constraintStart_toEndOf="@+id/do_factory_reset_button"
+                        app:layout_constraintTop_toTopOf="parent" />
+
+                    <com.google.android.material.switchmaterial.SwitchMaterial
+                        android:id="@+id/do_factory_reset_preserve_pairing_switch"
+                        style="@style/Widget.App.Button.OutlinedButton"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="4dp"
+                        android:checked="false"
+                        app:layout_constraintBaseline_toBaselineOf="@+id/do_factory_reset_button"
+                        app:layout_constraintStart_toEndOf="@+id/do_factory_reset_preserve_pairing_label"
+                        app:layout_constraintTop_toTopOf="parent" />
                 </androidx.constraintlayout.widget.ConstraintLayout>
 
                 <androidx.constraintlayout.widget.ConstraintLayout
@@ -217,7 +239,7 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginStart="10dp"
-                        android:text="Delete"
+                         android:text="@string/delete_button"
                         android:textAppearance="?attr/textAppearanceSubtitle1"
                         app:layout_constraintStart_toEndOf="@+id/set_file_type_selection_drop_down"
                         app:layout_constraintTop_toTopOf="parent" />
@@ -423,7 +445,7 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginStart="10dp"
-                        android:text="Enable"
+                         android:text="@string/enable"
                         android:textAppearance="?attr/textAppearanceSubtitle1"
                         app:layout_constraintEnd_toEndOf="parent"
                         app:layout_constraintStart_toEndOf="@+id/sdk_mode_header"
@@ -459,7 +481,7 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginStart="10dp"
-                        android:text="Disable"
+                         android:text="@string/disable"
                         android:textAppearance="?attr/textAppearanceSubtitle1"
                         app:layout_constraintEnd_toEndOf="parent"
                         app:layout_constraintStart_toEndOf="@+id/sdk_mode_led_header"
@@ -495,7 +517,7 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginStart="10dp"
-                        android:text="Disable"
+                         android:text="@string/disable"
                         android:textAppearance="?attr/textAppearanceSubtitle1"
                         app:layout_constraintEnd_toEndOf="parent"
                         app:layout_constraintStart_toEndOf="@+id/ppi_mode_led_header"
@@ -531,7 +553,7 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginStart="10dp"
-                        android:text="Start"
+                         android:text="@string/start_button"
                         android:textAppearance="?attr/textAppearanceSubtitle1"
                         app:layout_constraintEnd_toEndOf="parent"
                         app:layout_constraintStart_toEndOf="@+id/device_to_host_notifications_header"
@@ -552,7 +574,7 @@
                         android:id="@+id/time_settings_header"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="Time settings"
+                         android:text="@string/time_settings"
                         android:textAppearance="@android:style/TextAppearance.Material.Caption"
                         app:layout_constraintBaseline_toBaselineOf="@+id/time_settings_read_button"
                         app:layout_constraintEnd_toStartOf="@+id/time_settings_read_button"
@@ -567,7 +589,7 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginStart="10dp"
-                        android:text="Read"
+                         android:text="@string/read"
                         android:textAppearance="?attr/textAppearanceSubtitle1"
                         app:layout_constraintEnd_toStartOf="@+id/time_settings_write_button"
                         app:layout_constraintHorizontal_bias="0.5"
@@ -602,7 +624,7 @@
                         android:id="@+id/offline_rec_security_settings_header"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="Offline Recording enable encryption"
+                         android:text="@string/offline_recording_enable_encryption"
                         android:textAppearance="@android:style/TextAppearance.Material.Caption"
                         app:layout_constraintBaseline_toBaselineOf="@+id/offline_rec_security_settings_enabled"
                         app:layout_constraintEnd_toStartOf="@+id/offline_rec_security_settings_enabled"
@@ -648,7 +670,7 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginStart="10dp"
-                        android:text="Do FWU"
+                         android:text="@string/do_firmware_update_short"
                         android:textAppearance="?attr/textAppearanceSubtitle1"
                         app:layout_constraintStart_toEndOf="@id/do_firmware_update_header"
                         app:layout_constraintTop_toTopOf="parent" />
@@ -674,7 +696,7 @@
                     android:paddingStart="10dp"
                     android:paddingTop="10dp"
                     android:paddingBottom="20dp"
-                    android:text="Firmware update status:"
+                    android:text="@string/firmware_update_status"
                     android:textAppearance="@android:style/TextAppearance.Material.Caption"
                     android:textSize="12dp"
                     app:layout_constraintEnd_toStartOf="@+id/firmware_update_status"
@@ -688,7 +710,7 @@
                     android:paddingEnd="20dp"
                     android:paddingTop="10dp"
                     android:paddingBottom="20dp"
-                    android:text="Not started"
+                    android:text="@string/status_not_started_lowercase"
                     android:textAppearance="@android:style/TextAppearance.Material.Caption"
                     android:textColor="@color/secondaryColor"
                     app:layout_constraintEnd_toEndOf="parent"
@@ -936,6 +958,18 @@
                     app:layout_constraintStart_toEndOf="@id/force_stop_sleep_header"
                     app:layout_constraintTop_toTopOf="@id/force_stop_sleep_header"
                     app:layout_constraintBottom_toBottomOf="@id/force_stop_sleep_header" />
+
+                <Button
+                    android:id="@+id/get_sleep_status_button"
+                    style="@style/Widget.App.Button.OutlinedButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="10dp"
+                    android:text="@string/get_sleep_status_button"
+                    android:textAppearance="?attr/textAppearanceSubtitle1"
+                    app:layout_constraintStart_toEndOf="@id/force_stop_sleep_button"
+                    app:layout_constraintTop_toTopOf="@id/force_stop_sleep_button"
+                    app:layout_constraintBottom_toBottomOf="@id/force_stop_sleep_button" />
                 </androidx.constraintlayout.widget.ConstraintLayout>
 
                 <androidx.constraintlayout.widget.ConstraintLayout
@@ -1110,13 +1144,59 @@
 
             </androidx.constraintlayout.widget.ConstraintLayout>
 
+                <androidx.constraintlayout.widget.ConstraintLayout
+                    android:id="@+id/telemetry_group"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
+                    app:layout_constraintEnd_toEndOf="parent"
+                    app:layout_constraintStart_toStartOf="parent"
+                    app:layout_constraintTop_toBottomOf="@id/set_hibernate_mode_group">
+
+                <TextView
+                    android:id="@+id/telemetry_header"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="10dp"
+                    android:text="@string/telemetry_start_header"
+                    android:textAppearance="@android:style/TextAppearance.Material.Caption"
+                    app:layout_constraintBaseline_toBaselineOf="@+id/telemetry_button"
+                    app:layout_constraintEnd_toStartOf="@+id/telemetry_button"
+                    app:layout_constraintHorizontal_chainStyle="packed"
+                    app:layout_constraintStart_toStartOf="parent"
+                    app:layout_constraintTop_toTopOf="parent" />
+
+                <Button
+                    android:id="@+id/telemetry_button"
+                    style="@style/Widget.App.Button.OutlinedButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="10dp"
+                    android:text="@string/start_button"
+                    android:textAppearance="?attr/textAppearanceSubtitle1"
+                    app:layout_constraintStart_toEndOf="@+id/telemetry_header"
+                    app:layout_constraintTop_toTopOf="parent" />
+
+                <Spinner
+                    android:id="@+id/telemetry_type_selection_drop_down"
+                    android:layout_width="wrap_content"
+                    android:layout_height="match_parent"
+                    android:layout_marginStart="10dp"
+                    android:textAppearance="?attr/textAppearanceDisplaySmall"
+                    app:layout_constraintBaseline_toBaselineOf="@+id/telemetry_button"
+                    app:layout_constraintHorizontal_bias="0.0"
+                    app:layout_constraintHorizontal_chainStyle="packed"
+                    app:layout_constraintStart_toEndOf="@+id/telemetry_button"
+                    app:layout_constraintTop_toTopOf="parent"
+                    android:ellipsize="marquee"/>
+            </androidx.constraintlayout.widget.ConstraintLayout>
+
             <androidx.constraintlayout.widget.ConstraintLayout
                 android:id="@+id/generic_api_group"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="10dp"
-                android:visibility="gone"
-                app:layout_constraintTop_toBottomOf="@id/set_hibernate_mode_group"
+                app:layout_constraintTop_toBottomOf="@id/telemetry_group"
                 app:layout_constraintStart_toStartOf="parent"
                 app:layout_constraintEnd_toEndOf="parent">
 
