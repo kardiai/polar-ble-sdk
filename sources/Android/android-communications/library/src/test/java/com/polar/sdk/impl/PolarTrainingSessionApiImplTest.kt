@@ -97,8 +97,7 @@ internal class PolarTrainingSessionApiImplTest {
         val sessions = mockk<Set<BleDeviceSession>>()
         val advContent = mockk<BleAdvertisementContent>()
         every { listener.deviceSessions() } returns sessions
-        every { sessions.iterator().hasNext() } returns true
-        every { sessions.iterator().next() } returns session
+        every { sessions.iterator() } answers { listOf(session).iterator() }
         every { session.advertisementContent } returns advContent
         every { session.advertisementContent.polarDeviceId } returns deviceId
         every { session.polarDeviceType } returns "Polar360"
@@ -123,8 +122,7 @@ internal class PolarTrainingSessionApiImplTest {
         val sessions = mockk<Set<BleDeviceSession>>()
         val advContent = mockk<BleAdvertisementContent>()
         every { listener.deviceSessions() } returns sessions
-        every { sessions.iterator().hasNext() } returns true
-        every { sessions.iterator().next() } returns session
+        every { sessions.iterator() } answers { listOf(session).iterator() }
         every { session.advertisementContent } returns advContent
         every { session.advertisementContent.polarDeviceId } returns deviceId
         every { session.polarDeviceType } returns "Polar360"

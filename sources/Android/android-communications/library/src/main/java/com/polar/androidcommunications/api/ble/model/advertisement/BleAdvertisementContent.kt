@@ -90,8 +90,17 @@ class BleAdvertisementContent {
     var rssi = -100
         private set
 
+    /**
+     * @return true once an advertisement has been received from the device. A session created
+     * from the bonded or system-connected device list has a name and a device id, but has never
+     * been heard: its address is what the phone remembers, not where the device is.
+     */
+    var hasAdvertised = false
+        private set
+
     fun processAdvertisementData(advData: Map<AD_TYPE, ByteArray>, advertisementEventType: EVENT_TYPE, rssi: Int) {
         // start access of atomic section
+        hasAdvertised = true
         advertisementData.clear()
         advertisementData.putAll(advData)
         advertisementDataAll.putAll(advData)

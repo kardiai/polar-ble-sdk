@@ -792,7 +792,20 @@ class BDBleApiImpl private constructor(context: Context, features: Set<PolarBleS
     @Throws(PolarInvalidArgument::class)
     override fun connectToDevice(identifier: String) {
         logApiCall("connectToDevice", "identifier" to identifier)
-        val session = fetchSession(identifier, listener)
+        // A device id that only resolves to a bond is not somewhere to connect to: the address is
+        // the one the phone remembers, which is not necessarily the one the device is on, and a
+        // direct connection to it keeps the scan stopped until the watchdog gives up. Such a
+        // device is searched for instead, and connected to where it advertises from.
+        val byDeviceId = !identifier.contains(":")
+        val session = fetchSession(identifier, listener)?.takeUnless { resolved ->
+            val neverHeard = byDeviceId &&
+                resolved.sessionState == DeviceSessionState.SESSION_CLOSED &&
+                !resolved.advertisementContent.hasAdvertised
+            if (neverHeard) {
+                BleLogger.d(TAG, "connectToDevice($identifier): ${resolved.address} is a bond that has not advertised, searching for the device instead")
+            }
+            neverHeard
+        }
         val pendingAddress = session?.address
         if (pendingAddress != null && companionDeferredConnects.containsKey(pendingAddress)) {
             BleLogger.d(TAG, "connectToDevice($identifier) already pending companion association")
@@ -814,8 +827,9 @@ class BDBleApiImpl private constructor(context: Context, features: Set<PolarBleS
                             // advertise, but Android's cached identity can still resolve it.
                             it.search(true)
                                 .filter { bleDeviceSession: BleDeviceSession ->
-                                    if (identifier.contains(":")) bleDeviceSession.address == identifier
-                                    else bleDeviceSession.polarDeviceId == identifier
+                                    if (!byDeviceId) bleDeviceSession.address == identifier
+                                    else bleDeviceSession.polarDeviceId == identifier &&
+                                        bleDeviceSession.advertisementContent.hasAdvertised
                                 }
                                 .take(1)
                                 .collect { session: BleDeviceSession -> openConnection(session) }

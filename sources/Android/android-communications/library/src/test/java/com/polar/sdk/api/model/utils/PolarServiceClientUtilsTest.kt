@@ -37,8 +37,7 @@ class PolarServiceClientUtilsTest {
         val advContent = mockk<BleAdvertisementContent>()
 
         every { listener.deviceSessions() } returns sessions
-        every { sessions.iterator().hasNext() } returns true
-        every { sessions.iterator().next() } returns session
+        every { sessions.iterator() } answers { listOf(session).iterator() }
         every { session.advertisementContent } returns advContent
         every { session.advertisementContent.polarDeviceId } returns deviceId
         every { session.polarDeviceType } returns "Polar360"
@@ -65,8 +64,7 @@ class PolarServiceClientUtilsTest {
         val advContent = mockk<BleAdvertisementContent>()
 
         every { listener.deviceSessions() } returns sessions
-        every { sessions.iterator().hasNext() } returns true
-        every { sessions.iterator().next() } returns session
+        every { sessions.iterator() } answers { listOf(session).iterator() }
         every { session.advertisementContent } returns advContent
         every { session.advertisementContent.polarDeviceId } returns deviceId
         every { session.polarDeviceType } returns "Polar360"
@@ -93,8 +91,7 @@ class PolarServiceClientUtilsTest {
         val advContent = mockk<BleAdvertisementContent>()
 
         every { listener.deviceSessions() } returns sessions
-        every { sessions.iterator().hasNext() } returns true
-        every { sessions.iterator().next() } returns session
+        every { sessions.iterator() } answers { listOf(session).iterator() }
         every { session.advertisementContent } returns advContent
         every { session.advertisementContent.polarDeviceId } returns deviceId
         every { session.polarDeviceType } returns "Polar360"
@@ -121,8 +118,7 @@ class PolarServiceClientUtilsTest {
         val advContent = mockk<BleAdvertisementContent>()
 
         every { listener.deviceSessions() } returns sessions
-        every { sessions.iterator().hasNext() } returns true
-        every { sessions.iterator().next() } returns session
+        every { sessions.iterator() } answers { listOf(session).iterator() }
         every { session.advertisementContent } returns advContent
         every { session.advertisementContent.polarDeviceId } returns deviceId
         every { session.polarDeviceType } returns "Polar360"
@@ -149,8 +145,7 @@ class PolarServiceClientUtilsTest {
         val advContent = mockk<BleAdvertisementContent>()
 
         every { listener.deviceSessions() } returns sessions
-        every { sessions.iterator().hasNext() } returns true
-        every { sessions.iterator().next() } returns session
+        every { sessions.iterator() } answers { listOf(session).iterator() }
         every { session.advertisementContent } returns advContent
         every { session.advertisementContent.polarDeviceId } returns deviceId
         every { session.polarDeviceType } returns "Polar360"
@@ -177,8 +172,7 @@ class PolarServiceClientUtilsTest {
         val advContent = mockk<BleAdvertisementContent>()
 
         every { listener.deviceSessions() } returns sessions
-        every { sessions.iterator().hasNext() } returns true
-        every { sessions.iterator().next() } returns session
+        every { sessions.iterator() } answers { listOf(session).iterator() }
         every { session.advertisementContent } returns advContent
         every { session.advertisementContent.polarDeviceId } returns deviceId
         every { session.polarDeviceType } returns "Polar360"
@@ -205,8 +199,7 @@ class PolarServiceClientUtilsTest {
         val advContent = mockk<BleAdvertisementContent>()
 
         every { listener.deviceSessions() } returns sessions
-        every { sessions.iterator().hasNext() } returns true
-        every { sessions.iterator().next() } returns session
+        every { sessions.iterator() } answers { listOf(session).iterator() }
         every { session.advertisementContent } returns advContent
         every { session.advertisementContent.polarDeviceId } returns deviceId
         every { session.polarDeviceType } returns "Polar360"
@@ -233,8 +226,7 @@ class PolarServiceClientUtilsTest {
         val advContent = mockk<BleAdvertisementContent>()
 
         every { listener.deviceSessions() } returns sessions
-        every { sessions.iterator().hasNext() } returns true
-        every { sessions.iterator().next() } returns session
+        every { sessions.iterator() } answers { listOf(session).iterator() }
         every { session.advertisementContent } returns advContent
         every { session.advertisementContent.polarDeviceId } returns deviceId
         every { session.polarDeviceType } returns "Polar360"
@@ -261,8 +253,7 @@ class PolarServiceClientUtilsTest {
         val advContent = mockk<BleAdvertisementContent>()
 
         every { listener.deviceSessions() } returns sessions
-        every { sessions.iterator().hasNext() } returns true
-        every { sessions.iterator().next() } returns session
+        every { sessions.iterator() } answers { listOf(session).iterator() }
         every { session.advertisementContent } returns advContent
         every { session.advertisementContent.polarDeviceId } returns deviceId
         every { session.polarDeviceType } returns "Polar360"
@@ -306,8 +297,7 @@ class PolarServiceClientUtilsTest {
 
         every { listener.deviceSessions() } returns sessions
         every { listener.deviceSessions() } returns sessions
-        every { sessions.iterator().hasNext() } returns true
-        every { sessions.iterator().next() } returns session
+        every { sessions.iterator() } answers { listOf(session).iterator() }
         every { session.advertisementContent } returns advContent
         every { session.advertisementContent.polarDeviceId } returns deviceId
         every { session.sessionState } returns BleDeviceSession.DeviceSessionState.SESSION_CLOSED
@@ -331,8 +321,7 @@ class PolarServiceClientUtilsTest {
         val advContent = mockk<BleAdvertisementContent>()
 
         every { listener.deviceSessions() } returns sessions
-        every { sessions.iterator().hasNext() } returns true
-        every { sessions.iterator().next() } returns session
+        every { sessions.iterator() } answers { listOf(session).iterator() }
         every { session.advertisementContent } returns advContent
         every { session.advertisementContent.polarDeviceId } returns deviceId
         every { session.polarDeviceType } returns "Polar360"
@@ -359,8 +348,7 @@ class PolarServiceClientUtilsTest {
         val client = mockk<BlePsFtpClient>()
 
         every { listener.deviceSessions() } returns sessions
-        every { sessions.iterator().hasNext() } returns true
-        every { sessions.iterator().next() } returns session
+        every { sessions.iterator() } answers { listOf(session).iterator() }
         every { session.advertisementContent } returns advContent
         every { session.advertisementContent.polarDeviceId } returns deviceId
         every { session.polarDeviceType } returns "Polar360"
@@ -389,8 +377,7 @@ class PolarServiceClientUtilsTest {
         val advContent = mockk<BleAdvertisementContent>()
 
         every { listener.deviceSessions() } returns sessions
-        every { sessions.iterator().hasNext() } returns true
-        every { sessions.iterator().next() } returns session
+        every { sessions.iterator() } answers { listOf(session).iterator() }
         every { session.advertisementContent } returns advContent
         every { session.advertisementContent.polarDeviceId } returns deviceId
         every { session.polarDeviceType } returns "Polar360"
@@ -439,8 +426,7 @@ class PolarServiceClientUtilsTest {
         val advContent = mockk<BleAdvertisementContent>()
 
         every { listener.deviceSessions() } returns sessions
-        every { sessions.iterator().hasNext() } returns true
-        every { sessions.iterator().next() } returns session
+        every { sessions.iterator() } answers { listOf(session).iterator() }
         every { session.advertisementContent } returns advContent
         every { session.advertisementContent.polarDeviceId } returns deviceId
         every { session.polarDeviceType } returns "Polar360"
@@ -469,8 +455,7 @@ class PolarServiceClientUtilsTest {
         val advContent = mockk<BleAdvertisementContent>()
 
         every { listener.deviceSessions() } returns sessions
-        every { sessions.iterator().hasNext() } returns true
-        every { sessions.iterator().next() } returns session
+        every { sessions.iterator() } answers { listOf(session).iterator() }
         every { session.advertisementContent } returns advContent
         every { session.advertisementContent.polarDeviceId } returns deviceId
         every { session.polarDeviceType } returns "Polar360"
@@ -496,8 +481,7 @@ class PolarServiceClientUtilsTest {
         val advContent = mockk<BleAdvertisementContent>()
 
         every { listener.deviceSessions() } returns sessions
-        every { sessions.iterator().hasNext() } returns true
-        every { sessions.iterator().next() } returns session
+        every { sessions.iterator() } answers { listOf(session).iterator() }
         every { session.advertisementContent } returns advContent
         every { session.advertisementContent.polarDeviceId } returns deviceId
         every { session.polarDeviceType } returns "Polar360"
@@ -524,8 +508,7 @@ class PolarServiceClientUtilsTest {
         val advContent = mockk<BleAdvertisementContent>()
 
         every { listener.deviceSessions() } returns sessions
-        every { sessions.iterator().hasNext() } returns true
-        every { sessions.iterator().next() } returns session
+        every { sessions.iterator() } answers { listOf(session).iterator() }
         every { session.advertisementContent } returns advContent
         every { session.advertisementContent.polarDeviceId } returns deviceId
         every { session.polarDeviceType } returns "Polar360"
@@ -555,8 +538,7 @@ class PolarServiceClientUtilsTest {
         val advContent = mockk<BleAdvertisementContent>()
 
         every { listener.deviceSessions() } returns sessions
-        every { sessions.iterator().hasNext() } returns true
-        every { sessions.iterator().next() } returns session
+        every { sessions.iterator() } answers { listOf(session).iterator() }
         every { session.advertisementContent } returns advContent
         every { session.advertisementContent.polarDeviceId } returns deviceId
         every { session.polarDeviceType } returns "Polar360"

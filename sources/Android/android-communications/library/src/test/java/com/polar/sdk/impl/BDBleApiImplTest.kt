@@ -8,6 +8,7 @@ import android.content.IntentFilter
 import android.os.ParcelUuid
 import com.polar.androidcommunications.api.ble.model.BleDeviceSession
 import com.polar.androidcommunications.api.ble.model.advertisement.BleAdvertisementContent
+import com.polar.androidcommunications.common.ble.BleUtils
 import com.polar.androidcommunications.api.ble.model.gatt.client.BlePfcClient
 import com.polar.androidcommunications.api.ble.model.gatt.client.BlePfcClient.Companion.PFC_SERVICE
 import com.polar.androidcommunications.api.ble.model.gatt.client.psftp.BlePsFtpClient
@@ -134,11 +135,51 @@ class BDBleApiImplTest {
     }
 
     @Test
-    fun `connectToDevice resolves known device by ID without waiting for advertisements`() = runTest {
+    fun `connectToDevice by ID does not connect to a bond that has not advertised`() = runTest {
         val (api, listener) = mockConnectionListener()
         api.javaClass.getDeclaredField("apiScope").also { it.isAccessible = true }.set(api, this)
-        val target = mockConnectionSession("12345678", "AA:BB:CC:00:00:01")
-        val other = mockConnectionSession("87654321", "AA:BB:CC:00:00:02")
+        val results = MutableSharedFlow<BleDeviceSession>()
+        val bond = mockConnectionSession("12345678", "AA:BB:CC:00:00:01")
+        val advertising = mockConnectionSession("12345678", "AA:BB:CC:00:00:03", advertised = true)
+        every { listener.deviceSessions() } returns setOf(bond)
+        every { listener.search(true) } returns results
+
+        api.connectToDevice("12345678")
+        testScheduler.advanceUntilIdle()
+        results.emit(bond)
+        testScheduler.advanceUntilIdle()
+        verify(exactly = 0) { listener.openSessionDirect(any()) }
+        results.emit(advertising)
+        testScheduler.advanceUntilIdle()
+
+        verify(exactly = 1) { listener.openSessionDirect(advertising) }
+        verify(exactly = 0) { listener.openSessionDirect(bond) }
+    }
+
+    @Test
+    fun `connectToDevice by ID prefers the session that has advertised over a bond of the same device`() = runTest {
+        val (api, listener) = mockConnectionListener()
+        api.javaClass.getDeclaredField("apiScope").also { it.isAccessible = true }.set(api, this)
+        val firstBond = mockConnectionSession("12345678", "AA:BB:CC:00:00:01")
+        val secondBond = mockConnectionSession("12345678", "AA:BB:CC:00:00:02")
+        val advertising = mockConnectionSession("12345678", "AA:BB:CC:00:00:03", advertised = true)
+        every { listener.deviceSessions() } returns linkedSetOf(firstBond, advertising, secondBond)
+
+        api.connectToDevice("12345678")
+        testScheduler.advanceUntilIdle()
+
+        verify(exactly = 1) { listener.openSessionDirect(advertising) }
+        verify(exactly = 0) { listener.openSessionDirect(firstBond) }
+        verify(exactly = 0) { listener.openSessionDirect(secondBond) }
+        verify(exactly = 0) { listener.search(any()) }
+    }
+
+    @Test
+    fun `connectToDevice resolves advertised device by ID from the known sessions`() = runTest {
+        val (api, listener) = mockConnectionListener()
+        api.javaClass.getDeclaredField("apiScope").also { it.isAccessible = true }.set(api, this)
+        val target = mockConnectionSession("12345678", "AA:BB:CC:00:00:01", advertised = true)
+        val other = mockConnectionSession("87654321", "AA:BB:CC:00:00:02", advertised = true)
         every { listener.deviceSessions() } returns emptySet()
         every { listener.search(true) } returns flowOf(other, target)
 
@@ -170,7 +211,7 @@ class BDBleApiImplTest {
         val (api, listener) = mockConnectionListener()
         api.javaClass.getDeclaredField("apiScope").also { it.isAccessible = true }.set(api, this)
         val results = MutableSharedFlow<BleDeviceSession>()
-        val target = mockConnectionSession("12345678", "AA:BB:CC:00:00:01")
+        val target = mockConnectionSession("12345678", "AA:BB:CC:00:00:01", advertised = true)
         every { listener.deviceSessions() } returns emptySet()
         every { listener.search(true) } returns results
 
@@ -206,9 +247,12 @@ class BDBleApiImplTest {
         return Pair(api, listener)
     }
 
-    private fun mockConnectionSession(deviceId: String, address: String): BleDeviceSession {
+    private fun mockConnectionSession(deviceId: String, address: String, advertised: Boolean = false): BleDeviceSession {
         val session = mockk<BleDeviceSession>(relaxed = true)
-        val content = BleAdvertisementContent().apply { processName("Polar 360 $deviceId") }
+        val content = BleAdvertisementContent().apply {
+            if (advertised) processAdvertisementData(emptyMap(), BleUtils.EVENT_TYPE.ADV_IND, -60)
+            processName("Polar 360 $deviceId")
+        }
         every { session.advertisementContent } returns content
         every { session.polarDeviceId } returns deviceId
         every { session.address } returns address
