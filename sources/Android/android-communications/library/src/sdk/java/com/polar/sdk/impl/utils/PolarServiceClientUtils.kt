@@ -109,35 +109,34 @@ internal object PolarServiceClientUtils {
     }
 
     internal fun getRSSIValue(deviceId: String, listener: BleDeviceListener?): Int {
-        listener?.let {
-            val sessions = it.deviceSessions()
-            if (sessions != null) {
-                for (session in sessions) {
-                    if (session != null) {
-                        if (session.advertisementContent.polarDeviceId == deviceId) {
-                            return session.rssi
-                        }
-                    }
-                }
-            }
-        }
-        return -1
+        return sessionByDeviceId(deviceId, listener)?.rssi ?: -1
     }
 
+    /**
+     * A device id does not always name one session. Sessions are also created from the phone's
+     * bonded devices, with the device id taken from the bonded name, and a phone can hold several
+     * bonds for one device under different addresses (the address of an H10 changes, the bond
+     * stays). The first match used to be answered, in the order of a HashSet: a connect dialled
+     * an address nobody was on, and a stream or a disconnect could land on a session other than
+     * the one that was open.
+     *
+     * The open session is answered before any other, then one the device has advertised from,
+     * and a bond that was never heard only when there is nothing else.
+     */
     private fun sessionByDeviceId(deviceId: String, listener: BleDeviceListener?): BleDeviceSession? {
-        listener?.let {
-            val sessions = it.deviceSessions()
-            if (sessions != null) {
-                for (session in sessions) {
-                    if (session != null) {
-                        if (session.advertisementContent.polarDeviceId == deviceId) {
-                            return session
-                        }
-                    }
-                }
-            }
-        }
-        return null
+        val matching = listener?.deviceSessions()
+            ?.filterNotNull()
+            ?.filter { session -> session.advertisementContent.polarDeviceId == deviceId }
+            .orEmpty()
+        return matching.singleOrNull() ?: matching.maxByOrNull { session -> preference(session) }
+    }
+
+    private fun preference(session: BleDeviceSession): Int {
+        var preference = 0
+        if (session.sessionState == DeviceSessionState.SESSION_OPEN) preference += 4
+        if (session.advertisementContent.hasAdvertised) preference += 2
+        if (session.sessionState != DeviceSessionState.SESSION_CLOSED) preference += 1
+        return preference
     }
 
     private fun sessionByAddress(address: String, listener: BleDeviceListener?): BleDeviceSession? {
